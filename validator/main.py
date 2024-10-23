@@ -1,5 +1,4 @@
-from typing import Any, Callable, Dict, Optional
-
+from typing import Any, Dict, Optional, Callable
 from guardrails.validator_base import (
     FailResult,
     PassResult,
@@ -7,42 +6,56 @@ from guardrails.validator_base import (
     Validator,
     register_validator,
 )
+from MauvaiseLangue import scrape_insultes, detect_insultes  # Importer vos fonctions
 
+@register_validator(name="guardrails/french_toxic_language", data_type="string")
+class FrenchToxicLanguage(Validator):
+    """French Toxic Language Validator.
+    
+    Ce validateur vÃ©rifie si le texte donnÃ© contient des insultes en franÃ§ais basÃ©es sur les donnÃ©es extraites de Wiktionary.
+    """
 
-@register_validator(name="guardrails/validator_template", data_type="string")
-class ValidatorTemplate(Validator):
-    """Validates that {fill in how you validator interacts with the passed value}.
+    def __init__(self, on_fail: Optional[Callable] = None):
+        """
+        Initialise le validateur FrenchToxicLanguage.
+        
+        Args:
+            on_fail (Callable, optional): Politique Ã  appliquer en cas d'Ã©chec (e.g., reask, fix, filter).
+        """
+        super().__init__(on_fail=on_fail)
+        # Charger les insultes via la fonction de scraping
+        self.insultes = scrape_insultes()
 
-    **Key Properties**
-
-    | Property                      | Description                       |
-    | ----------------------------- | --------------------------------- |
-    | Name for `format` attribute   | `guardrails/validator_template`   |
-    | Supported data types          | `string`                          |
-    | Programmatic fix              | {If you support programmatic fixes, explain it here. Otherwise `None`} |
-
-    Args:
-        arg_1 (string): {Description of the argument here}
-        arg_2 (string): {Description of the argument here}
-    """  # noqa
-
-    # If you don't have any init args, you can omit the __init__ method.
-    def __init__(
-        self,
-        arg_1: str,
-        arg_2: str,
-        on_fail: Optional[Callable] = None,
-    ):
-        super().__init__(on_fail=on_fail, arg_1=arg_1, arg_2=arg_2)
-        self._arg_1 = arg_1
-        self._arg_2 = arg_2
-
-    def validate(self, value: Any, metadata: Dict = {}) -> ValidationResult:
-        """Validates that {fill in how you validator interacts with the passed value}."""
-        # Add your custom validator logic here and return a PassResult or FailResult accordingly.
-        if value != "pass": # FIXME
+    def validate(self, value: Any, metadata: Dict) -> ValidationResult:
+        """
+        Valide la chaÃ®ne de caractÃ¨res donnÃ©e pour vÃ©rifier si elle contient des insultes en franÃ§ais.
+        
+        Args:
+            value (Any): Le texte d'entrÃ©e Ã  valider.
+            metadata (Dict): MÃ©tadonnÃ©es supplÃ©mentaires (optionnel).
+        
+        Returns:
+            ValidationResult: PassResult si valide, FailResult sinon.
+        """
+        detected_insultes = detect_insultes(value)
+        
+        if detected_insultes:
             return FailResult(
-                error_message="{A descriptive but concise error message about why validation failed}",
-                fix_value="{The programmtic fix if applicable, otherwise remove this kwarg.}",
+                error_message=f"Le texte contient un langage toxique : {', '.join(detected_insultes)}",
+                fix_value=None  # Optionnellement, vous pouvez proposer de filtrer les insultes dÃ©tectÃ©es
             )
+        
         return PassResult()
+
+# Tests
+class TestFrenchToxicLanguage:
+    def test_success_case(self):
+        validator = FrenchToxicLanguage()
+        result = validator.validate("Bonjour, comment Ã§a va ?", {})
+        assert isinstance(result, PassResult)
+
+    def test_failure_case(self):
+        validator = FrenchToxicLanguage()
+        result = validator.validate("EspÃ¨ce de idiot, imbÃ©cile !", {})
+        assert isinstance(result, FailResult)
+        assert "idiot" in result.error_message
